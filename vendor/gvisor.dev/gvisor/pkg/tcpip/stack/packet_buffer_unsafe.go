@@ -21,8 +21,8 @@ const PacketBufferStructSize = int(unsafe.Sizeof(PacketBuffer{}))
 
 // ID returns a unique ID for the underlying storage of the packet.
 //
-// Two *PacketBuffers have the same IDs if and only if they point to the same
+// Two PacketBufferPtrs have the same IDs if and only if they point to the same
 // location in memory.
-func (pk *PacketBuffer) ID() uintptr {
+func (pk PacketBufferPtr) ID() uintptr {
 	return uintptr(unsafe.Pointer(pk))
 }

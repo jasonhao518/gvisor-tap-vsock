@@ -63,7 +63,7 @@ const (
 	// ndpPrefixInformationLength is the expected length, in bytes, of the
 	// body of an NDP Prefix Information option, as per RFC 4861 section
 	// 4.6.2 which specifies that the Length field is 4. Given this, the
-	// expected length, in bytes, is 30 because 4 * lengthByteUnits (8) - 2
+	// expected length, in bytes, is 30 becuase 4 * lengthByteUnits (8) - 2
 	// (Type & Length) = 30.
 	ndpPrefixInformationLength = 30
 
@@ -173,7 +173,7 @@ var (
 )
 
 // Next returns the next element in the backing NDPOptions, or true if we are
-// done, or false if an error occurred.
+// done, or false if an error occured.
 //
 // The return can be read as option, done, error. Note, option should only be
 // used if done is false and error is nil.
@@ -339,8 +339,8 @@ func (b NDPOptions) Serialize(s NDPOptionsSerializer) int {
 		used := o.serializeInto(b[2:])
 
 		// Zero out remaining (padding) bytes, if any exists.
-		if used+2 < l {
-			clear(b[used+2 : l])
+		for i := used + 2; i < l; i++ {
+			b[i] = 0
 		}
 
 		b = b[l:]
@@ -566,7 +566,9 @@ func (o NDPPrefixInformation) serializeInto(b []byte) int {
 
 	// Zero out the Reserved2 field.
 	reserved2 := b[ndpPrefixInformationReserved2Offset:][:ndpPrefixInformationReserved2Length]
-	clear(reserved2)
+	for i := range reserved2 {
+		reserved2[i] = 0
+	}
 
 	return used
 }
@@ -685,7 +687,9 @@ func (o NDPRecursiveDNSServer) serializeInto(b []byte) int {
 	used := copy(b, o)
 
 	// Zero out the reserved bytes that are before the Lifetime field.
-	clear(b[0:ndpRecursiveDNSServerLifetimeOffset])
+	for i := 0; i < ndpRecursiveDNSServerLifetimeOffset; i++ {
+		b[i] = 0
+	}
 
 	return used
 }
@@ -778,7 +782,9 @@ func (o NDPDNSSearchList) serializeInto(b []byte) int {
 	used := copy(b, o)
 
 	// Zero out the reserved bytes that are before the Lifetime field.
-	clear(b[0:ndpDNSSearchListLifetimeOffset])
+	for i := 0; i < ndpDNSSearchListLifetimeOffset; i++ {
+		b[i] = 0
+	}
 
 	return used
 }

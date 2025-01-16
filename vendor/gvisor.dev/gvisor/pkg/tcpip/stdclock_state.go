@@ -14,10 +14,7 @@
 
 package tcpip
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 // beforeSave is invoked by stateify.
 func (s *stdClock) beforeSave() {
@@ -25,6 +22,6 @@ func (s *stdClock) beforeSave() {
 }
 
 // afterLoad is invoked by stateify.
-func (s *stdClock) afterLoad(context.Context) {
+func (s *stdClock) afterLoad() {
 	s.baseTime = time.Now()
 }

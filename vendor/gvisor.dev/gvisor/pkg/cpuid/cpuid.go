@@ -38,7 +38,7 @@ import (
 	"gvisor.dev/gvisor/pkg/sync"
 )
 
-// contextID is the package for anyContext.Context.Value keys.
+// contextID is the package for context.Context.Value keys.
 type contextID int
 
 const (
@@ -51,13 +51,13 @@ const (
 	_AT_HWCAP2 = 26
 )
 
-// anyContext represents context.Context.
-type anyContext interface {
+// context represents context.Context.
+type context interface {
 	Value(key any) any
 }
 
 // FromContext returns the FeatureSet from the context, if available.
-func FromContext(ctx anyContext) FeatureSet {
+func FromContext(ctx context) FeatureSet {
 	v := ctx.Value(CtxFeatureSet)
 	if v == nil {
 		return FeatureSet{} // Panics if used.

@@ -1,4 +1,3 @@
-//go:build windows
 // +build windows
 
 package e2e
@@ -26,16 +25,15 @@ var _ = Describe("connectivity", func() {
 		err := startProxy()
 		Expect(err).ShouldNot(HaveOccurred())
 
-		var pid, tid uint32
+		var pid uint32
 		for i := 0; i < 20; i++ {
-			pid, tid, err = readTid()
-			if err == nil && tid != 0 {
+			pid, _, err = readTid()
+			if err == nil {
 				break
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		Expect(tid).ShouldNot(Equal(0))
 		Expect(err).ShouldNot(HaveOccurred())
 		proc, err := os.FindProcess(int(pid))
 		Expect(err).ShouldNot(HaveOccurred())

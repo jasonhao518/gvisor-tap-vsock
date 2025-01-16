@@ -3,8 +3,6 @@
 package cpuid
 
 import (
-	"context"
-
 	"gvisor.dev/gvisor/pkg/state"
 )
 
@@ -28,10 +26,10 @@ func (h *hwCap) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(1, &h.hwCap2)
 }
 
-func (h *hwCap) afterLoad(context.Context) {}
+func (h *hwCap) afterLoad() {}
 
 // +checklocksignore
-func (h *hwCap) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (h *hwCap) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &h.hwCap1)
 	stateSourceObject.Load(1, &h.hwCap2)
 }

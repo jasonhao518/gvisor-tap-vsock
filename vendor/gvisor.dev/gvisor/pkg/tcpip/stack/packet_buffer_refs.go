@@ -1,7 +1,6 @@
 package stack
 
 import (
-	"context"
 	"fmt"
 
 	"gvisor.dev/gvisor/pkg/atomicbitops"
@@ -135,7 +134,7 @@ func (r *packetBufferRefs) DecRef(destroy func()) {
 	}
 }
 
-func (r *packetBufferRefs) afterLoad(context.Context) {
+func (r *packetBufferRefs) afterLoad() {
 	if r.ReadRefs() > 0 {
 		refs.Register(r)
 	}

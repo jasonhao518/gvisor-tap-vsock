@@ -6,8 +6,6 @@
 package cpuid
 
 import (
-	"context"
-
 	"gvisor.dev/gvisor/pkg/state"
 )
 
@@ -33,12 +31,12 @@ func (fs *FeatureSet) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(1, &fs.hwCap)
 }
 
-func (fs *FeatureSet) afterLoad(context.Context) {}
+func (fs *FeatureSet) afterLoad() {}
 
 // +checklocksignore
-func (fs *FeatureSet) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (fs *FeatureSet) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(1, &fs.hwCap)
-	stateSourceObject.LoadValue(0, new(Static), func(y any) { fs.loadFunction(ctx, y.(Static)) })
+	stateSourceObject.LoadValue(0, new(Static), func(y any) { fs.loadFunction(y.(Static)) })
 }
 
 func (i *In) StateTypeName() string {
@@ -61,10 +59,10 @@ func (i *In) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(1, &i.Ecx)
 }
 
-func (i *In) afterLoad(context.Context) {}
+func (i *In) afterLoad() {}
 
 // +checklocksignore
-func (i *In) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (i *In) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &i.Eax)
 	stateSourceObject.Load(1, &i.Ecx)
 }
@@ -93,10 +91,10 @@ func (o *Out) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(3, &o.Edx)
 }
 
-func (o *Out) afterLoad(context.Context) {}
+func (o *Out) afterLoad() {}
 
 // +checklocksignore
-func (o *Out) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (o *Out) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &o.Eax)
 	stateSourceObject.Load(1, &o.Ebx)
 	stateSourceObject.Load(2, &o.Ecx)

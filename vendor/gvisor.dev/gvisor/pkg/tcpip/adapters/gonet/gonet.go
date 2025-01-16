@@ -179,7 +179,6 @@ func (d *deadlineTimer) setDeadline(cancelCh *chan struct{}, timer **time.Timer,
 	// "A zero value for t means I/O operations will not time out."
 	// - net.Conn.SetDeadline
 	if t.IsZero() {
-		*timer = nil
 		return
 	}
 
@@ -547,15 +546,17 @@ func DialContextTCP(ctx context.Context, s *stack.Stack, addr tcpip.FullAddress,
 type UDPConn struct {
 	deadlineTimer
 
-	ep tcpip.Endpoint
-	wq *waiter.Queue
+	stack *stack.Stack
+	ep    tcpip.Endpoint
+	wq    *waiter.Queue
 }
 
 // NewUDPConn creates a new UDPConn.
-func NewUDPConn(wq *waiter.Queue, ep tcpip.Endpoint) *UDPConn {
+func NewUDPConn(s *stack.Stack, wq *waiter.Queue, ep tcpip.Endpoint) *UDPConn {
 	c := &UDPConn{
-		ep: ep,
-		wq: wq,
+		stack: s,
+		ep:    ep,
+		wq:    wq,
 	}
 	c.deadlineTimer.init()
 	return c
@@ -585,7 +586,7 @@ func DialUDP(s *stack.Stack, laddr, raddr *tcpip.FullAddress, network tcpip.Netw
 		}
 	}
 
-	c := NewUDPConn(&wq, ep)
+	c := NewUDPConn(s, &wq, ep)
 
 	if raddr != nil {
 		if err := c.ep.Connect(*raddr); err != nil {

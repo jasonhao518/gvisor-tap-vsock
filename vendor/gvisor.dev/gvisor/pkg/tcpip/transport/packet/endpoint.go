@@ -40,7 +40,7 @@ import (
 type packet struct {
 	packetEntry
 	// data holds the actual packet data, including any headers and payload.
-	data       *stack.PacketBuffer
+	data       stack.PacketBufferPtr
 	receivedAt time.Time `state:".(int64)"`
 	// senderAddr is the network address of the sender.
 	senderAddr tcpip.FullAddress
@@ -94,7 +94,7 @@ type endpoint struct {
 }
 
 // NewEndpoint returns a new packet endpoint.
-func NewEndpoint(s *stack.Stack, cooked bool, netProto tcpip.NetworkProtocolNumber, waiterQueue *waiter.Queue) tcpip.Endpoint {
+func NewEndpoint(s *stack.Stack, cooked bool, netProto tcpip.NetworkProtocolNumber, waiterQueue *waiter.Queue) (tcpip.Endpoint, tcpip.Error) {
 	ep := &endpoint{
 		stack:         s,
 		cooked:        cooked,
@@ -115,9 +115,10 @@ func NewEndpoint(s *stack.Stack, cooked bool, netProto tcpip.NetworkProtocolNumb
 		ep.ops.SetReceiveBufferSize(int64(rs.Default), false /* notify */)
 	}
 
-	s.RegisterPacketEndpoint(0, netProto, ep)
-
-	return ep
+	if err := s.RegisterPacketEndpoint(0, netProto, ep); err != nil {
+		return nil, err
+	}
+	return ep, nil
 }
 
 // Abort implements stack.TransportEndpoint.Abort.
@@ -262,7 +263,7 @@ func (*endpoint) Disconnect() tcpip.Error {
 }
 
 // Connect implements tcpip.Endpoint.Connect. Packet sockets cannot be
-// connected, and this function always returns *tcpip.ErrNotSupported.
+// connected, and this function always returnes *tcpip.ErrNotSupported.
 func (*endpoint) Connect(tcpip.FullAddress) tcpip.Error {
 	return &tcpip.ErrNotSupported{}
 }
@@ -416,7 +417,7 @@ func (ep *endpoint) GetSockOptInt(opt tcpip.SockOptInt) (int, tcpip.Error) {
 }
 
 // HandlePacket implements stack.PacketEndpoint.HandlePacket.
-func (ep *endpoint) HandlePacket(nicID tcpip.NICID, netProto tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
+func (ep *endpoint) HandlePacket(nicID tcpip.NICID, netProto tcpip.NetworkProtocolNumber, pkt stack.PacketBufferPtr) {
 	ep.rcvMu.Lock()
 
 	// Drop the packet if our buffer is currently full.

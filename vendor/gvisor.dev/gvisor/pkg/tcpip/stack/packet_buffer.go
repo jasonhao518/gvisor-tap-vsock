@@ -58,6 +58,9 @@ type PacketBufferOptions struct {
 	OnRelease func()
 }
 
+// PacketBufferPtr is a pointer to a PacketBuffer.
+type PacketBufferPtr = *PacketBuffer
+
 // A PacketBuffer contains all the data of a network packet.
 //
 // As a PacketBuffer traverses up the stack, it may be necessary to pass it to
@@ -91,7 +94,7 @@ type PacketBufferOptions struct {
 //
 // Outgoing Packet: When a header is pushed, `pushed` gets incremented by the
 // pushed length, and the current value is stored for each header. PacketBuffer
-// subtracts this value from `reserved` to compute the starting offset of each
+// substracts this value from `reserved` to compute the starting offset of each
 // header in `buf`.
 //
 // Incoming Packet: When a header is consumed (a.k.a. parsed), the current
@@ -169,7 +172,7 @@ type PacketBuffer struct {
 }
 
 // NewPacketBuffer creates a new PacketBuffer with opts.
-func NewPacketBuffer(opts PacketBufferOptions) *PacketBuffer {
+func NewPacketBuffer(opts PacketBufferOptions) PacketBufferPtr {
 	pk := pkPool.Get().(*PacketBuffer)
 	pk.reset()
 	if opts.ReserveHeaderBytes != 0 {
@@ -187,7 +190,7 @@ func NewPacketBuffer(opts PacketBufferOptions) *PacketBuffer {
 }
 
 // IncRef increments the PacketBuffer's refcount.
-func (pk *PacketBuffer) IncRef() *PacketBuffer {
+func (pk PacketBufferPtr) IncRef() PacketBufferPtr {
 	pk.packetBufferRefs.IncRef()
 	return pk
 }
@@ -195,7 +198,7 @@ func (pk *PacketBuffer) IncRef() *PacketBuffer {
 // DecRef decrements the PacketBuffer's refcount. If the refcount is
 // decremented to zero, the PacketBuffer is returned to the PacketBuffer
 // pool.
-func (pk *PacketBuffer) DecRef() {
+func (pk PacketBufferPtr) DecRef() {
 	pk.packetBufferRefs.DecRef(func() {
 		if pk.onRelease != nil {
 			pk.onRelease()
@@ -206,24 +209,24 @@ func (pk *PacketBuffer) DecRef() {
 	})
 }
 
-func (pk *PacketBuffer) reset() {
+func (pk PacketBufferPtr) reset() {
 	*pk = PacketBuffer{}
 }
 
 // ReservedHeaderBytes returns the number of bytes initially reserved for
 // headers.
-func (pk *PacketBuffer) ReservedHeaderBytes() int {
+func (pk PacketBufferPtr) ReservedHeaderBytes() int {
 	return pk.reserved
 }
 
 // AvailableHeaderBytes returns the number of bytes currently available for
 // headers. This is relevant to PacketHeader.Push method only.
-func (pk *PacketBuffer) AvailableHeaderBytes() int {
+func (pk PacketBufferPtr) AvailableHeaderBytes() int {
 	return pk.reserved - pk.pushed
 }
 
 // VirtioNetHeader returns the handle to virtio-layer header.
-func (pk *PacketBuffer) VirtioNetHeader() PacketHeader {
+func (pk PacketBufferPtr) VirtioNetHeader() PacketHeader {
 	return PacketHeader{
 		pk:  pk,
 		typ: virtioNetHeader,
@@ -231,7 +234,7 @@ func (pk *PacketBuffer) VirtioNetHeader() PacketHeader {
 }
 
 // LinkHeader returns the handle to link-layer header.
-func (pk *PacketBuffer) LinkHeader() PacketHeader {
+func (pk PacketBufferPtr) LinkHeader() PacketHeader {
 	return PacketHeader{
 		pk:  pk,
 		typ: linkHeader,
@@ -239,7 +242,7 @@ func (pk *PacketBuffer) LinkHeader() PacketHeader {
 }
 
 // NetworkHeader returns the handle to network-layer header.
-func (pk *PacketBuffer) NetworkHeader() PacketHeader {
+func (pk PacketBufferPtr) NetworkHeader() PacketHeader {
 	return PacketHeader{
 		pk:  pk,
 		typ: networkHeader,
@@ -247,7 +250,7 @@ func (pk *PacketBuffer) NetworkHeader() PacketHeader {
 }
 
 // TransportHeader returns the handle to transport-layer header.
-func (pk *PacketBuffer) TransportHeader() PacketHeader {
+func (pk PacketBufferPtr) TransportHeader() PacketHeader {
 	return PacketHeader{
 		pk:  pk,
 		typ: transportHeader,
@@ -255,33 +258,29 @@ func (pk *PacketBuffer) TransportHeader() PacketHeader {
 }
 
 // HeaderSize returns the total size of all headers in bytes.
-func (pk *PacketBuffer) HeaderSize() int {
+func (pk PacketBufferPtr) HeaderSize() int {
 	return pk.pushed + pk.consumed
 }
 
 // Size returns the size of packet in bytes.
-func (pk *PacketBuffer) Size() int {
+func (pk PacketBufferPtr) Size() int {
 	return int(pk.buf.Size()) - pk.headerOffset()
 }
 
 // MemSize returns the estimation size of the pk in memory, including backing
 // buffer data.
-func (pk *PacketBuffer) MemSize() int {
+func (pk PacketBufferPtr) MemSize() int {
 	return int(pk.buf.Size()) + PacketBufferStructSize
 }
 
 // Data returns the handle to data portion of pk.
-func (pk *PacketBuffer) Data() PacketData {
+func (pk PacketBufferPtr) Data() PacketData {
 	return PacketData{pk: pk}
 }
 
 // AsSlices returns the underlying storage of the whole packet.
-//
-// Note that AsSlices can allocate a lot. In hot paths it may be preferable to
-// iterate over a PacketBuffer's data via AsViewList.
-func (pk *PacketBuffer) AsSlices() [][]byte {
-	vl := pk.buf.AsViewList()
-	views := make([][]byte, 0, vl.Len())
+func (pk PacketBufferPtr) AsSlices() [][]byte {
+	var views [][]byte
 	offset := pk.headerOffset()
 	pk.buf.SubApply(offset, int(pk.buf.Size())-offset, func(v *buffer.View) {
 		views = append(views, v.AsSlice())
@@ -289,15 +288,9 @@ func (pk *PacketBuffer) AsSlices() [][]byte {
 	return views
 }
 
-// AsViewList returns the list of Views backing the PacketBuffer along with the
-// header offset into them. Users may not save or modify the ViewList returned.
-func (pk *PacketBuffer) AsViewList() (buffer.ViewList, int) {
-	return pk.buf.AsViewList(), pk.headerOffset()
-}
-
 // ToBuffer returns a caller-owned copy of the underlying storage of the whole
 // packet.
-func (pk *PacketBuffer) ToBuffer() buffer.Buffer {
+func (pk PacketBufferPtr) ToBuffer() buffer.Buffer {
 	b := pk.buf.Clone()
 	b.TrimFront(int64(pk.headerOffset()))
 	return b
@@ -305,7 +298,7 @@ func (pk *PacketBuffer) ToBuffer() buffer.Buffer {
 
 // ToView returns a caller-owned copy of the underlying storage of the whole
 // packet as a view.
-func (pk *PacketBuffer) ToView() *buffer.View {
+func (pk PacketBufferPtr) ToView() *buffer.View {
 	p := buffer.NewView(int(pk.buf.Size()))
 	offset := pk.headerOffset()
 	pk.buf.SubApply(offset, int(pk.buf.Size())-offset, func(v *buffer.View) {
@@ -314,19 +307,19 @@ func (pk *PacketBuffer) ToView() *buffer.View {
 	return p
 }
 
-func (pk *PacketBuffer) headerOffset() int {
+func (pk PacketBufferPtr) headerOffset() int {
 	return pk.reserved - pk.pushed
 }
 
-func (pk *PacketBuffer) headerOffsetOf(typ headerType) int {
+func (pk PacketBufferPtr) headerOffsetOf(typ headerType) int {
 	return pk.reserved + pk.headers[typ].offset
 }
 
-func (pk *PacketBuffer) dataOffset() int {
+func (pk PacketBufferPtr) dataOffset() int {
 	return pk.reserved + pk.consumed
 }
 
-func (pk *PacketBuffer) push(typ headerType, size int) []byte {
+func (pk PacketBufferPtr) push(typ headerType, size int) []byte {
 	h := &pk.headers[typ]
 	if h.length > 0 {
 		panic(fmt.Sprintf("push(%s, %d) called after previous push", typ, size))
@@ -341,7 +334,7 @@ func (pk *PacketBuffer) push(typ headerType, size int) []byte {
 	return view.AsSlice()
 }
 
-func (pk *PacketBuffer) consume(typ headerType, size int) (v []byte, consumed bool) {
+func (pk PacketBufferPtr) consume(typ headerType, size int) (v []byte, consumed bool) {
 	h := &pk.headers[typ]
 	if h.length > 0 {
 		panic(fmt.Sprintf("consume must not be called twice: type %s", typ))
@@ -356,7 +349,7 @@ func (pk *PacketBuffer) consume(typ headerType, size int) (v []byte, consumed bo
 	return view.AsSlice(), true
 }
 
-func (pk *PacketBuffer) headerView(typ headerType) buffer.View {
+func (pk PacketBufferPtr) headerView(typ headerType) buffer.View {
 	h := &pk.headers[typ]
 	if h.length == 0 {
 		return buffer.View{}
@@ -370,7 +363,7 @@ func (pk *PacketBuffer) headerView(typ headerType) buffer.View {
 
 // Clone makes a semi-deep copy of pk. The underlying packet payload is
 // shared. Hence, no modifications is done to underlying packet payload.
-func (pk *PacketBuffer) Clone() *PacketBuffer {
+func (pk PacketBufferPtr) Clone() PacketBufferPtr {
 	newPk := pkPool.Get().(*PacketBuffer)
 	newPk.reset()
 	newPk.buf = pk.buf.Clone()
@@ -396,7 +389,7 @@ func (pk *PacketBuffer) Clone() *PacketBuffer {
 
 // ReserveHeaderBytes prepends reserved space for headers at the front
 // of the underlying buf. Can only be called once per packet.
-func (pk *PacketBuffer) ReserveHeaderBytes(reserved int) {
+func (pk PacketBufferPtr) ReserveHeaderBytes(reserved int) {
 	if pk.reserved != 0 {
 		panic(fmt.Sprintf("ReserveHeaderBytes(...) called on packet with reserved=%d, want reserved=0", pk.reserved))
 	}
@@ -407,7 +400,7 @@ func (pk *PacketBuffer) ReserveHeaderBytes(reserved int) {
 // Network returns the network header as a header.Network.
 //
 // Network should only be called when NetworkHeader has been set.
-func (pk *PacketBuffer) Network() header.Network {
+func (pk PacketBufferPtr) Network() header.Network {
 	switch netProto := pk.NetworkProtocolNumber; netProto {
 	case header.IPv4ProtocolNumber:
 		return header.IPv4(pk.NetworkHeader().Slice())
@@ -423,7 +416,7 @@ func (pk *PacketBuffer) Network() header.Network {
 //
 // See PacketBuffer.Data for details about how a packet buffer holds an inbound
 // packet.
-func (pk *PacketBuffer) CloneToInbound() *PacketBuffer {
+func (pk PacketBufferPtr) CloneToInbound() PacketBufferPtr {
 	newPk := pkPool.Get().(*PacketBuffer)
 	newPk.reset()
 	newPk.buf = pk.buf.Clone()
@@ -439,7 +432,7 @@ func (pk *PacketBuffer) CloneToInbound() *PacketBuffer {
 //
 // The returned packet buffer will have the network and transport headers
 // set if the original packet buffer did.
-func (pk *PacketBuffer) DeepCopyForForwarding(reservedHeaderBytes int) *PacketBuffer {
+func (pk PacketBufferPtr) DeepCopyForForwarding(reservedHeaderBytes int) PacketBufferPtr {
 	payload := BufferSince(pk.NetworkHeader())
 	defer payload.Release()
 	newPk := NewPacketBuffer(PacketBufferOptions{
@@ -469,6 +462,11 @@ func (pk *PacketBuffer) DeepCopyForForwarding(reservedHeaderBytes int) *PacketBu
 	return newPk
 }
 
+// IsNil returns whether the pointer is logically nil.
+func (pk PacketBufferPtr) IsNil() bool {
+	return pk == nil
+}
+
 // headerInfo stores metadata about a header in a packet.
 //
 // +stateify savable
@@ -483,7 +481,7 @@ type headerInfo struct {
 
 // PacketHeader is a handle object to a header in the underlying packet.
 type PacketHeader struct {
-	pk  *PacketBuffer
+	pk  PacketBufferPtr
 	typ headerType
 }
 
@@ -525,7 +523,7 @@ func (h PacketHeader) Consume(size int) (v []byte, consumed bool) {
 //
 // +stateify savable
 type PacketData struct {
-	pk *PacketBuffer
+	pk PacketBufferPtr
 }
 
 // PullUp returns a contiguous slice of size bytes from the beginning of d.
@@ -603,7 +601,7 @@ func (d PacketData) MergeBuffer(b *buffer.Buffer) {
 
 // MergeFragment appends the data portion of frag to dst. It modifies
 // frag and frag should not be used again.
-func MergeFragment(dst, frag *PacketBuffer) {
+func MergeFragment(dst, frag PacketBufferPtr) {
 	frag.buf.TrimFront(int64(frag.dataOffset()))
 	dst.buf.Merge(&frag.buf)
 }
@@ -676,7 +674,7 @@ func (d PacketData) ChecksumAtOffset(offset int) uint16 {
 
 // Range represents a contiguous subportion of a PacketBuffer.
 type Range struct {
-	pk     *PacketBuffer
+	pk     PacketBufferPtr
 	offset int
 	length int
 }

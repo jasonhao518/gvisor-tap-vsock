@@ -5,19 +5,16 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 	"unsafe"
 
 	"github.com/containers/gvisor-tap-vsock/pkg/sshclient"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
-	"github.com/containers/gvisor-tap-vsock/pkg/utils"
 	"github.com/containers/winquit/pkg/winquit"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -25,9 +22,8 @@ import (
 )
 
 const (
-	ERR_BAD_ARGS                           = 0x000A
-	WM_QUIT                                = 0x12
-	RPC_S_SERVER_UNAVAILABLE syscall.Errno = 1722
+	ERR_BAD_ARGS = 0x000A
+	WM_QUIT      = 0x12
 )
 
 var (
@@ -56,23 +52,11 @@ func main() {
 		os.Exit(ERR_BAD_ARGS)
 	}
 
-	// Attempt to set up logging with the event log service.
-	// If it fails because the Windows Event Log Service is not running, show a warning
-	// and continue execution. There could be a reason why user disabled the Event Log.
 	log, err := setupLogging(args[0])
 	if err != nil {
-		if errors.Is(err, syscall.Errno(RPC_S_SERVER_UNAVAILABLE)) {
-			logrus.Warn("RPC server is unavailable, continuing without event log")
-		} else {
-			logrus.Errorf("Error setting up logging: %v", err)
-			os.Exit(1)
-		}
+		os.Exit(1)
 	}
-
-	// Defer closing the log if setup was successful
-	if log != nil {
-		defer log.Close()
-	}
+	defer log.Close()
 
 	stateDir = args[1]
 
@@ -189,29 +173,9 @@ func saveThreadId() (uint32, error) {
 		return 0, err
 	}
 	defer file.Close()
-
-	tid, err := getThreadId()
-	if err != nil {
-		return 0, err
-	}
-
+	tid := winquit.GetCurrentMessageLoopThreadId()
 	fmt.Fprintf(file, "%d:%d\n", os.Getpid(), tid)
 	return tid, nil
-}
-
-func getThreadId() (uint32, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	getTid := func() (uint32, error) {
-		tid := winquit.GetCurrentMessageLoopThreadId()
-		if tid != 0 {
-			return tid, nil
-		}
-		return 0, fmt.Errorf("failed to get thread ID")
-	}
-
-	return utils.Retry(ctx, getTid, "Waiting for message loop thread id")
 }
 
 // Creates an "error" style pop-up window

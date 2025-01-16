@@ -55,11 +55,11 @@ type segment struct {
 	segmentEntry
 	segmentRefs
 
-	ep     *Endpoint
+	ep     *endpoint
 	qFlags queueFlags
 	id     stack.TransportEndpointID `state:"manual"`
 
-	pkt *stack.PacketBuffer
+	pkt stack.PacketBufferPtr
 
 	sequenceNumber seqnum.Value
 	ackNumber      seqnum.Value
@@ -92,29 +92,15 @@ type segment struct {
 	lost bool
 }
 
-func newIncomingSegment(id stack.TransportEndpointID, clock tcpip.Clock, pkt *stack.PacketBuffer) (*segment, error) {
+func newIncomingSegment(id stack.TransportEndpointID, clock tcpip.Clock, pkt stack.PacketBufferPtr) (*segment, error) {
 	hdr := header.TCP(pkt.TransportHeader().Slice())
-	var srcAddr tcpip.Address
-	var dstAddr tcpip.Address
-	switch netProto := pkt.NetworkProtocolNumber; netProto {
-	case header.IPv4ProtocolNumber:
-		hdr := header.IPv4(pkt.NetworkHeader().Slice())
-		srcAddr = hdr.SourceAddress()
-		dstAddr = hdr.DestinationAddress()
-	case header.IPv6ProtocolNumber:
-		hdr := header.IPv6(pkt.NetworkHeader().Slice())
-		srcAddr = hdr.SourceAddress()
-		dstAddr = hdr.DestinationAddress()
-	default:
-		panic(fmt.Sprintf("unknown network protocol number %d", netProto))
-	}
-
+	netHdr := pkt.Network()
 	csum, csumValid, ok := header.TCPValid(
 		hdr,
 		func() uint16 { return pkt.Data().Checksum() },
 		uint16(pkt.Data().Size()),
-		srcAddr,
-		dstAddr,
+		netHdr.SourceAddress(),
+		netHdr.DestinationAddress(),
 		pkt.RXChecksumValidated)
 	if !ok {
 		return nil, fmt.Errorf("header data offset does not respect size constraints: %d < offset < %d, got offset=%d", header.TCPMinimumSize, len(hdr), hdr.DataOffset())
@@ -182,7 +168,7 @@ func (s *segment) merge(oth *segment) {
 // setOwner sets the owning endpoint for this segment. Its required
 // to be called to ensure memory accounting for receive/send buffer
 // queues is done properly.
-func (s *segment) setOwner(ep *Endpoint, qFlags queueFlags) {
+func (s *segment) setOwner(ep *endpoint, qFlags queueFlags) {
 	switch qFlags {
 	case recvQ:
 		ep.updateReceiveMemUsed(s.segMemSize())

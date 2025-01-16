@@ -15,7 +15,6 @@
 package packet
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -29,7 +28,7 @@ func (p *packet) saveReceivedAt() int64 {
 }
 
 // loadReceivedAt is invoked by stateify.
-func (p *packet) loadReceivedAt(_ context.Context, nsec int64) {
+func (p *packet) loadReceivedAt(nsec int64) {
 	p.receivedAt = time.Unix(0, nsec)
 }
 
@@ -38,15 +37,14 @@ func (ep *endpoint) beforeSave() {
 	ep.rcvMu.Lock()
 	defer ep.rcvMu.Unlock()
 	ep.rcvDisabled = true
-	ep.stack.RegisterResumableEndpoint(ep)
 }
 
 // afterLoad is invoked by stateify.
-func (ep *endpoint) afterLoad(ctx context.Context) {
+func (ep *endpoint) afterLoad() {
 	ep.mu.Lock()
 	defer ep.mu.Unlock()
 
-	ep.stack = stack.RestoreStackFromContext(ctx)
+	ep.stack = stack.StackFromEnv
 	ep.ops.InitHandler(ep, ep.stack, tcpip.GetStackSendBufferLimits, tcpip.GetStackReceiveBufferLimits)
 
 	if err := ep.stack.RegisterPacketEndpoint(ep.boundNIC, ep.boundNetProto, ep); err != nil {
@@ -56,11 +54,4 @@ func (ep *endpoint) afterLoad(ctx context.Context) {
 	ep.rcvMu.Lock()
 	ep.rcvDisabled = false
 	ep.rcvMu.Unlock()
-}
-
-// Resume implements tcpip.ResumableEndpoint.Resume.
-func (ep *endpoint) Resume() {
-	ep.rcvMu.Lock()
-	defer ep.rcvMu.Unlock()
-	ep.rcvDisabled = false
 }

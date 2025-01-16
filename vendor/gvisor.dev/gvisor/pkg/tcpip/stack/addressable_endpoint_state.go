@@ -30,8 +30,6 @@ func (lifetimes *AddressLifetimes) sanitize() {
 var _ AddressableEndpoint = (*AddressableEndpointState)(nil)
 
 // AddressableEndpointState is an implementation of an AddressableEndpoint.
-//
-// +stateify savable
 type AddressableEndpointState struct {
 	networkEndpoint NetworkEndpoint
 	options         AddressableEndpointStateOptions
@@ -40,19 +38,15 @@ type AddressableEndpointState struct {
 	//
 	// AddressableEndpointState.mu
 	//   addressState.mu
-	mu addressableEndpointStateRWMutex `state:"nosave"`
-	// TODO(b/361075310): Enable s/r for the below fields.
-	//
+	mu addressableEndpointStateRWMutex
 	// +checklocks:mu
-	endpoints map[tcpip.Address]*addressState `state:"nosave"`
+	endpoints map[tcpip.Address]*addressState
 	// +checklocks:mu
-	primary []*addressState `state:"nosave"`
+	primary []*addressState
 }
 
 // AddressableEndpointStateOptions contains options used to configure an
 // AddressableEndpointState.
-//
-// +stateify savable
 type AddressableEndpointStateOptions struct {
 	// HiddenWhileDisabled determines whether addresses should be returned to
 	// callers while the NetworkEndpoint this AddressableEndpointState belongs
@@ -440,7 +434,7 @@ func (a *AddressableEndpointState) MainAddress() tcpip.AddressWithPrefix {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	ep := a.acquirePrimaryAddressRLocked(tcpip.Address{}, tcpip.Address{} /* srcHint */, func(ep *addressState) bool {
+	ep := a.acquirePrimaryAddressRLocked(tcpip.Address{}, func(ep *addressState) bool {
 		switch kind := ep.GetKind(); kind {
 		case Permanent:
 			return a.networkEndpoint.Enabled() || !a.options.HiddenWhileDisabled
@@ -468,7 +462,7 @@ func (a *AddressableEndpointState) MainAddress() tcpip.AddressWithPrefix {
 // valid according to isValid.
 //
 // +checklocksread:a.mu
-func (a *AddressableEndpointState) acquirePrimaryAddressRLocked(remoteAddr, srcHint tcpip.Address, isValid func(*addressState) bool) *addressState {
+func (a *AddressableEndpointState) acquirePrimaryAddressRLocked(remoteAddr tcpip.Address, isValid func(*addressState) bool) *addressState {
 	// TODO: Move this out into IPv4-specific code.
 	// IPv6 handles source IP selection elsewhere. We have to do source
 	// selection only for IPv4, in which case ep is never deprecated. Thus
@@ -479,11 +473,6 @@ func (a *AddressableEndpointState) acquirePrimaryAddressRLocked(remoteAddr, srcH
 		for _, state := range a.primary {
 			if !isValid(state) {
 				continue
-			}
-			// Source hint takes precedent over prefix matching.
-			if state.addr.Address == srcHint && srcHint != (tcpip.Address{}) {
-				best = state
-				break
 			}
 			stateLen := state.addr.Address.MatchingPrefix(remoteAddr)
 			if best == nil || bestLen < stateLen {
@@ -543,20 +532,16 @@ func (a *AddressableEndpointState) acquirePrimaryAddressRLocked(remoteAddr, srcH
 // If there is no matching address, a temporary address will be returned if
 // allowTemp is true.
 //
-// If readOnly is true, the address will be returned without an extra reference.
-// In this case it is not safe to modify the endpoint, only read attributes like
-// subnet.
-//
 // Regardless how the address was obtained, it will be acquired before it is
 // returned.
-func (a *AddressableEndpointState) AcquireAssignedAddressOrMatching(localAddr tcpip.Address, f func(AddressEndpoint) bool, allowTemp bool, tempPEB PrimaryEndpointBehavior, readOnly bool) AddressEndpoint {
+func (a *AddressableEndpointState) AcquireAssignedAddressOrMatching(localAddr tcpip.Address, f func(AddressEndpoint) bool, allowTemp bool, tempPEB PrimaryEndpointBehavior) AddressEndpoint {
 	lookup := func() *addressState {
 		if addrState, ok := a.endpoints[localAddr]; ok {
 			if !addrState.IsAssigned(allowTemp) {
 				return nil
 			}
 
-			if !readOnly && !addrState.TryIncRef() {
+			if !addrState.TryIncRef() {
 				panic(fmt.Sprintf("failed to increase the reference count for address = %s", addrState.addr))
 			}
 
@@ -565,10 +550,7 @@ func (a *AddressableEndpointState) AcquireAssignedAddressOrMatching(localAddr tc
 
 		if f != nil {
 			for _, addrState := range a.endpoints {
-				if addrState.IsAssigned(allowTemp) && f(addrState) {
-					if !readOnly && !addrState.TryIncRef() {
-						continue
-					}
+				if addrState.IsAssigned(allowTemp) && f(addrState) && addrState.TryIncRef() {
 					return addrState
 				}
 			}
@@ -627,30 +609,20 @@ func (a *AddressableEndpointState) AcquireAssignedAddressOrMatching(localAddr tc
 	if ep == nil {
 		return nil
 	}
-	if readOnly {
-		if ep.addressableEndpointState == a {
-			// Checklocks doesn't understand that we are logically guaranteed to have
-			// ep.mu locked already. We need to use checklocksignore to appease the
-			// analyzer.
-			ep.addressableEndpointState.decAddressRefLocked(ep) // +checklocksignore
-		} else {
-			ep.DecRef()
-		}
-	}
 	return ep
 }
 
 // AcquireAssignedAddress implements AddressableEndpoint.
-func (a *AddressableEndpointState) AcquireAssignedAddress(localAddr tcpip.Address, allowTemp bool, tempPEB PrimaryEndpointBehavior, readOnly bool) AddressEndpoint {
-	return a.AcquireAssignedAddressOrMatching(localAddr, nil, allowTemp, tempPEB, readOnly)
+func (a *AddressableEndpointState) AcquireAssignedAddress(localAddr tcpip.Address, allowTemp bool, tempPEB PrimaryEndpointBehavior) AddressEndpoint {
+	return a.AcquireAssignedAddressOrMatching(localAddr, nil, allowTemp, tempPEB)
 }
 
 // AcquireOutgoingPrimaryAddress implements AddressableEndpoint.
-func (a *AddressableEndpointState) AcquireOutgoingPrimaryAddress(remoteAddr tcpip.Address, srcHint tcpip.Address, allowExpired bool) AddressEndpoint {
+func (a *AddressableEndpointState) AcquireOutgoingPrimaryAddress(remoteAddr tcpip.Address, allowExpired bool) AddressEndpoint {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	ep := a.acquirePrimaryAddressRLocked(remoteAddr, srcHint, func(ep *addressState) bool {
+	ep := a.acquirePrimaryAddressRLocked(remoteAddr, func(ep *addressState) bool {
 		return ep.IsAssigned(allowExpired)
 	})
 
@@ -738,8 +710,6 @@ func (a *AddressableEndpointState) Cleanup() {
 var _ AddressEndpoint = (*addressState)(nil)
 
 // addressState holds state for an address.
-//
-// +stateify savable
 type addressState struct {
 	addressableEndpointState *AddressableEndpointState
 	addr                     tcpip.AddressWithPrefix
@@ -750,7 +720,7 @@ type addressState struct {
 	//
 	// AddressableEndpointState.mu
 	//   addressState.mu
-	mu   addressStateRWMutex `state:"nosave"`
+	mu   addressStateRWMutex
 	refs addressStateRefs
 	// checklocks:mu
 	kind AddressKind

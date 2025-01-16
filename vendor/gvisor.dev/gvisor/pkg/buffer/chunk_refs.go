@@ -1,7 +1,6 @@
 package buffer
 
 import (
-	"context"
 	"fmt"
 
 	"gvisor.dev/gvisor/pkg/atomicbitops"
@@ -135,7 +134,7 @@ func (r *chunkRefs) DecRef(destroy func()) {
 	}
 }
 
-func (r *chunkRefs) afterLoad(context.Context) {
+func (r *chunkRefs) afterLoad() {
 	if r.ReadRefs() > 0 {
 		refs.Register(r)
 	}

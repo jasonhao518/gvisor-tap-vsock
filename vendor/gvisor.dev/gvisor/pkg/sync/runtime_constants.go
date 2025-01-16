@@ -20,3 +20,10 @@ const (
 	WaitReasonChanReceive uint8 = 14 // +checkconst runtime waitReasonChanReceive
 	WaitReasonSemacquire  uint8 = 18 // +checkconst runtime waitReasonSemacquire
 )
+
+// Values for the traceEv argument to gopark, from Go's src/runtime/trace.go.
+const (
+	TraceEvGoBlockRecv   byte = 23 // +checkconst runtime traceEvGoBlockRecv
+	TraceEvGoBlockSelect byte = 24 // +checkconst runtime traceEvGoBlockSelect
+	TraceEvGoBlockSync   byte = 25 // +checkconst runtime traceEvGoBlockSync
+)

@@ -23,7 +23,7 @@ type Flags struct {
 
 	// LoadBalanced indicates SO_REUSEPORT.
 	//
-	// LoadBalanced takes precedence over MostRecent.
+	// LoadBalanced takes precidence over MostRecent.
 	LoadBalanced bool
 
 	// TupleOnly represents TCP SO_REUSEADDR.
@@ -91,8 +91,6 @@ func (f BitFlags) ToFlags() Flags {
 }
 
 // FlagCounter counts how many references each flag combination has.
-//
-// +stateify savable
 type FlagCounter struct {
 	// refs stores the count for each possible flag combination, (0 though
 	// FlagMask).

@@ -3,8 +3,6 @@
 package buffer
 
 import (
-	"context"
-
 	"gvisor.dev/gvisor/pkg/state"
 )
 
@@ -30,12 +28,12 @@ func (b *Buffer) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(1, &b.size)
 }
 
-func (b *Buffer) afterLoad(context.Context) {}
+func (b *Buffer) afterLoad() {}
 
 // +checklocksignore
-func (b *Buffer) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (b *Buffer) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(1, &b.size)
-	stateSourceObject.LoadValue(0, new([]byte), func(y any) { b.loadData(ctx, y.([]byte)) })
+	stateSourceObject.LoadValue(0, new([]byte), func(y any) { b.loadData(y.([]byte)) })
 }
 
 func (c *chunk) StateTypeName() string {
@@ -58,10 +56,10 @@ func (c *chunk) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(1, &c.data)
 }
 
-func (c *chunk) afterLoad(context.Context) {}
+func (c *chunk) afterLoad() {}
 
 // +checklocksignore
-func (c *chunk) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (c *chunk) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &c.chunkRefs)
 	stateSourceObject.Load(1, &c.data)
 }
@@ -85,9 +83,9 @@ func (r *chunkRefs) StateSave(stateSinkObject state.Sink) {
 }
 
 // +checklocksignore
-func (r *chunkRefs) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (r *chunkRefs) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &r.refCount)
-	stateSourceObject.AfterLoad(func() { r.afterLoad(ctx) })
+	stateSourceObject.AfterLoad(r.afterLoad)
 }
 
 func (v *View) StateTypeName() string {
@@ -112,67 +110,67 @@ func (v *View) StateSave(stateSinkObject state.Sink) {
 	stateSinkObject.Save(2, &v.chunk)
 }
 
-func (v *View) afterLoad(context.Context) {}
+func (v *View) afterLoad() {}
 
 // +checklocksignore
-func (v *View) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (v *View) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &v.read)
 	stateSourceObject.Load(1, &v.write)
 	stateSourceObject.Load(2, &v.chunk)
 }
 
-func (l *ViewList) StateTypeName() string {
-	return "pkg/buffer.ViewList"
+func (l *viewList) StateTypeName() string {
+	return "pkg/buffer.viewList"
 }
 
-func (l *ViewList) StateFields() []string {
+func (l *viewList) StateFields() []string {
 	return []string{
 		"head",
 		"tail",
 	}
 }
 
-func (l *ViewList) beforeSave() {}
+func (l *viewList) beforeSave() {}
 
 // +checklocksignore
-func (l *ViewList) StateSave(stateSinkObject state.Sink) {
+func (l *viewList) StateSave(stateSinkObject state.Sink) {
 	l.beforeSave()
 	stateSinkObject.Save(0, &l.head)
 	stateSinkObject.Save(1, &l.tail)
 }
 
-func (l *ViewList) afterLoad(context.Context) {}
+func (l *viewList) afterLoad() {}
 
 // +checklocksignore
-func (l *ViewList) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (l *viewList) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &l.head)
 	stateSourceObject.Load(1, &l.tail)
 }
 
-func (e *ViewEntry) StateTypeName() string {
-	return "pkg/buffer.ViewEntry"
+func (e *viewEntry) StateTypeName() string {
+	return "pkg/buffer.viewEntry"
 }
 
-func (e *ViewEntry) StateFields() []string {
+func (e *viewEntry) StateFields() []string {
 	return []string{
 		"next",
 		"prev",
 	}
 }
 
-func (e *ViewEntry) beforeSave() {}
+func (e *viewEntry) beforeSave() {}
 
 // +checklocksignore
-func (e *ViewEntry) StateSave(stateSinkObject state.Sink) {
+func (e *viewEntry) StateSave(stateSinkObject state.Sink) {
 	e.beforeSave()
 	stateSinkObject.Save(0, &e.next)
 	stateSinkObject.Save(1, &e.prev)
 }
 
-func (e *ViewEntry) afterLoad(context.Context) {}
+func (e *viewEntry) afterLoad() {}
 
 // +checklocksignore
-func (e *ViewEntry) StateLoad(ctx context.Context, stateSourceObject state.Source) {
+func (e *viewEntry) StateLoad(stateSourceObject state.Source) {
 	stateSourceObject.Load(0, &e.next)
 	stateSourceObject.Load(1, &e.prev)
 }
@@ -182,6 +180,6 @@ func init() {
 	state.Register((*chunk)(nil))
 	state.Register((*chunkRefs)(nil))
 	state.Register((*View)(nil))
-	state.Register((*ViewList)(nil))
-	state.Register((*ViewEntry)(nil))
+	state.Register((*viewList)(nil))
+	state.Register((*viewEntry)(nil))
 }

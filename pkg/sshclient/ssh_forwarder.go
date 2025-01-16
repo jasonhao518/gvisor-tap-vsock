@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/containers/gvisor-tap-vsock/pkg/fs"
-	"github.com/containers/gvisor-tap-vsock/pkg/utils"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -99,13 +98,13 @@ func connectForward(ctx context.Context, bastion *Bastion) (CloseWriteConn, erro
 				if err == nil {
 					break
 				}
-				if bastionRetries > 2 || !utils.Sleep(ctx, 200*time.Millisecond) {
+				if bastionRetries > 2 || !sleep(ctx, 200*time.Millisecond) {
 					return nil, errors.Wrapf(err, "Couldn't reestablish ssh connection: %s", bastion.Host)
 				}
 			}
 		}
 
-		if !utils.Sleep(ctx, 200*time.Millisecond) {
+		if !sleep(ctx, 200*time.Millisecond) {
 			retries = 3
 		}
 	}
@@ -174,7 +173,7 @@ func setupProxy(ctx context.Context, socketURI *url.URL, dest *url.URL, identity
 		}
 		return CreateBastion(dest, passphrase, identity, conn, connectFunc)
 	}
-	bastion, err := utils.Retry(ctx, createBastion, "Waiting for sshd")
+	bastion, err := retry(ctx, createBastion, "Waiting for sshd")
 	if err != nil {
 		return &SSHForward{}, fmt.Errorf("setupProxy failed: %w", err)
 	}
@@ -182,6 +181,37 @@ func setupProxy(ctx context.Context, socketURI *url.URL, dest *url.URL, identity
 	logrus.Debugf("Socket forward established: %s -> %s\n", socketURI.Path, dest.Path)
 
 	return &SSHForward{listener, bastion, socketURI}, nil
+}
+
+const maxRetries = 60
+const initialBackoff = 100 * time.Millisecond
+
+func retry[T comparable](ctx context.Context, retryFunc func() (T, error), retryMsg string) (T, error) {
+	var (
+		returnVal T
+		err       error
+	)
+
+	backoff := initialBackoff
+
+loop:
+	for i := 0; i < maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			break loop
+		default:
+			// proceed
+		}
+
+		returnVal, err = retryFunc()
+		if err == nil {
+			return returnVal, nil
+		}
+		logrus.Debugf("%s (%s)", retryMsg, backoff)
+		sleep(ctx, backoff)
+		backoff = backOff(backoff)
+	}
+	return returnVal, fmt.Errorf("timeout: %w", err)
 }
 
 func acceptConnection(ctx context.Context, listener net.Listener, bastion *Bastion, socketURI *url.URL) error {
@@ -225,4 +255,25 @@ func forward(src io.ReadCloser, dest CloseWriteStream, complete *sync.WaitGroup)
 
 	// Trigger an EOF on the other end
 	_ = dest.CloseWrite()
+}
+
+func backOff(delay time.Duration) time.Duration {
+	if delay == 0 {
+		delay = 5 * time.Millisecond
+	} else {
+		delay *= 2
+	}
+	if delay > time.Second {
+		delay = time.Second
+	}
+	return delay
+}
+
+func sleep(ctx context.Context, wait time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(wait):
+		return true
+	}
 }

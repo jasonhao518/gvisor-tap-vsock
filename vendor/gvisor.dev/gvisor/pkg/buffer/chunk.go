@@ -27,7 +27,7 @@ const (
 	// number and passing the result to MostSignificantOne64.
 	baseChunkSizeLog2 = 6
 
-	// This is the size of the buffers in the first pool. Each subsequent pool
+	// This is the size of the buffers in the first pool. Each subsquent pool
 	// creates payloads 2^(pool index) times larger than the first pool's
 	// payloads.
 	baseChunkSize = 1 << baseChunkSizeLog2 // 64
@@ -87,7 +87,9 @@ func newChunk(size int) *chunk {
 	} else {
 		pool := getChunkPool(size)
 		c = pool.Get().(*chunk)
-		clear(c.data)
+		for i := range c.data {
+			c.data[i] = 0
+		}
 	}
 	c.InitRefs()
 	return c

@@ -23,8 +23,6 @@ import (
 )
 
 // EndpointFactory implements stack.RawFactory.
-//
-// +stateify savable
 type EndpointFactory struct{}
 
 // NewUnassociatedEndpoint implements stack.RawFactory.NewUnassociatedEndpoint.
@@ -34,13 +32,11 @@ func (EndpointFactory) NewUnassociatedEndpoint(stack *stack.Stack, netProto tcpi
 
 // NewPacketEndpoint implements stack.RawFactory.NewPacketEndpoint.
 func (EndpointFactory) NewPacketEndpoint(stack *stack.Stack, cooked bool, netProto tcpip.NetworkProtocolNumber, waiterQueue *waiter.Queue) (tcpip.Endpoint, tcpip.Error) {
-	return packet.NewEndpoint(stack, cooked, netProto, waiterQueue), nil
+	return packet.NewEndpoint(stack, cooked, netProto, waiterQueue)
 }
 
 // CreateOnlyFactory implements stack.RawFactory. It allows creation of raw
 // endpoints that do not support reading, writing, binding, etc.
-//
-// +stateify savable
 type CreateOnlyFactory struct{}
 
 // NewUnassociatedEndpoint implements stack.RawFactory.NewUnassociatedEndpoint.

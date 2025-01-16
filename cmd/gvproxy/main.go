@@ -167,7 +167,7 @@ func main() {
 
 	// If the given port is not between the privileged ports
 	// and the oft considered maximum port, return an error.
-	if sshPort != -1 && sshPort < 1024 || sshPort > 65535 {
+	if sshPort < 1024 || sshPort > 65535 {
 		exitWithError(errors.New("ssh-port value must be between 1024 and 65535"))
 	}
 	protocol := types.HyperKitProtocol
@@ -182,7 +182,7 @@ func main() {
 	}
 
 	if c := len(forwardSocket); c != len(forwardDest) || c != len(forwardUser) || c != len(forwardIdentify) {
-		exitWithError(errors.New("--forward-sock, --forward-dest, --forward-user, and --forward-identity must all be specified together, " +
+		exitWithError(errors.New("-forward-sock, --forward-dest, --forward-user, and --forward-identity must all be specified together, " +
 			"the same number of times, or not at all"))
 	}
 
@@ -250,7 +250,9 @@ func main() {
 			},
 		},
 		DNSSearchDomains: searchDomains(),
-		Forwards:         getForwardsMap(sshPort, sshHostPort),
+		Forwards: map[string]string{
+			fmt.Sprintf("127.0.0.1:%d", sshPort): sshHostPort,
+		},
 		NAT: map[string]string{
 			hostIP: "127.0.0.1",
 		},
@@ -280,15 +282,6 @@ func main() {
 	if err := groupErrs.Wait(); err != nil {
 		log.Errorf("gvproxy exiting: %v", err)
 		exitCode = 1
-	}
-}
-
-func getForwardsMap(sshPort int, sshHostPort string) map[string]string {
-	if sshPort == -1 {
-		return map[string]string{}
-	}
-	return map[string]string{
-		fmt.Sprintf("127.0.0.1:%d", sshPort): sshHostPort,
 	}
 }
 
