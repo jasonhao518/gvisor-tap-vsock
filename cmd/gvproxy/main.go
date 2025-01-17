@@ -46,19 +46,20 @@ var (
 	pidFile         string
 	exitCode        int
 	logFile         string
+	ip              string
 )
 
 const (
-	gatewayIP   = "192.168.127.1"
-	sshHostPort = "192.168.127.2:22"
-	hostIP      = "192.168.127.254"
-	host        = "host"
-	gateway     = "gateway"
+	gatewayIP = "192.168.127.1"
+	hostIP    = "192.168.127.254"
+	host      = "host"
+	gateway   = "gateway"
 )
 
 func main() {
 	version := types.NewVersion("gvproxy")
 	version.AddFlag()
+	flag.StringVar(&ip, "ip", "192.168.127.99", "VM ip address")
 	flag.Var(&endpoints, "listen", "control endpoint")
 	flag.BoolVar(&debug, "debug", false, "Print debug info")
 	flag.IntVar(&mtu, "mtu", 1500, "Set the MTU")
@@ -76,6 +77,7 @@ func main() {
 	flag.StringVar(&logFile, "log-file", "", "Output log messages (logrus) to a given file path")
 	flag.Parse()
 
+	log.Info("ip address", ip)
 	if version.ShowVersion() {
 		fmt.Println(version.String())
 		os.Exit(0)
@@ -219,7 +221,7 @@ func main() {
 		GatewayIP:         gatewayIP,
 		GatewayMacAddress: "5a:94:ef:e4:0c:dd",
 		DHCPStaticLeases: map[string]string{
-			"192.168.127.2": "5a:94:ef:e4:0c:ee",
+			ip: "5a:94:ef:e4:0c:ee",
 		},
 		DNS: []types.Zone{
 			{
@@ -251,7 +253,12 @@ func main() {
 		},
 		DNSSearchDomains: searchDomains(),
 		Forwards: map[string]string{
-			fmt.Sprintf("127.0.0.1:%d", sshPort): sshHostPort,
+			fmt.Sprintf("127.0.0.1:%d", sshPort): fmt.Sprintf("%s:22", ip),
+			fmt.Sprintf("127.0.0.1:%d", 6443):    fmt.Sprintf("%s:6443", ip),
+			fmt.Sprintf("127.0.0.1:%d", 2379):    fmt.Sprintf("%s:2379", ip),
+			fmt.Sprintf("127.0.0.1:%d", 2380):    fmt.Sprintf("%s:2380", ip),
+			fmt.Sprintf("127.0.0.1:%d", 10250):   fmt.Sprintf("%s:10250", ip),
+			fmt.Sprintf("127.0.0.1:%d", 10256):   fmt.Sprintf("%s:10256", ip),
 		},
 		NAT: map[string]string{
 			hostIP: "127.0.0.1",
@@ -304,6 +311,7 @@ func captureFile() string {
 }
 
 func run(ctx context.Context, g *errgroup.Group, configuration *types.Configuration, endpoints []string) error {
+	// need to inject libp2p here
 	vn, err := virtualnetwork.New(configuration)
 	if err != nil {
 		return err
@@ -468,7 +476,7 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 		dest := &url.URL{
 			Scheme: "ssh",
 			User:   url.User(forwardUser[i]),
-			Host:   sshHostPort,
+			Host:   fmt.Sprintf("%s:22", ip),
 			Path:   forwardDest[i],
 		}
 		j := i
