@@ -22,9 +22,11 @@ import (
 	"github.com/containers/gvisor-tap-vsock/pkg/transport"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
 	"github.com/containers/gvisor-tap-vsock/pkg/virtualnetwork"
+	"github.com/containers/gvisor-tap-vsock/src"
 	"github.com/containers/winquit/pkg/winquit"
 	"github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,6 +58,18 @@ const (
 	gateway   = "gateway"
 )
 
+func init() {
+	// Log as Text with color
+	logrus.SetFormatter(&logrus.TextFormatter{
+		ForceColors:     true,
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC822,
+	})
+
+	// Log to stdout
+	logrus.SetOutput(os.Stdout)
+}
+
 func main() {
 	version := types.NewVersion("gvproxy")
 	version.AddFlag()
@@ -75,9 +89,32 @@ func main() {
 	flag.Var(&forwardIdentify, "forward-identity", "Path to SSH identity key for forwarding")
 	flag.StringVar(&pidFile, "pid-file", "", "Generate a file with the PID in it")
 	flag.StringVar(&logFile, "log-file", "", "Output log messages (logrus) to a given file path")
+
+	username := flag.String("user", "", "username to use in the chatroom.")
+	chatroom := flag.String("room", "", "chatroom to join.")
+
 	flag.Parse()
 
 	log.Info("ip address", ip)
+	fmt.Println("The PeerChat Application is starting.")
+	fmt.Println("This may take upto 30 seconds.")
+	fmt.Println()
+
+	// Create a new P2PHost
+	p2phost := src.NewP2P()
+	log.Info("Completed P2P Setup")
+
+	p2phost.AdvertiseConnect()
+
+	log.Info("Connected to Service Peers")
+
+	// Join the chat room
+	chatapp, _ := src.JoinChatRoom(p2phost, *username, *chatroom)
+	log.Infof("Joined the '%s' chatroom as '%s'", chatapp.RoomName, chatapp.UserName)
+
+	// Wait for network setup to complete
+	time.Sleep(time.Second * 5)
+
 	if version.ShowVersion() {
 		fmt.Println(version.String())
 		os.Exit(0)
