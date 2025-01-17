@@ -90,30 +90,9 @@ func main() {
 	flag.StringVar(&pidFile, "pid-file", "", "Generate a file with the PID in it")
 	flag.StringVar(&logFile, "log-file", "", "Output log messages (logrus) to a given file path")
 
-	username := flag.String("user", "", "username to use in the chatroom.")
-	chatroom := flag.String("room", "", "chatroom to join.")
-
 	flag.Parse()
 
 	log.Info("ip address", ip)
-	fmt.Println("The PeerChat Application is starting.")
-	fmt.Println("This may take upto 30 seconds.")
-	fmt.Println()
-
-	// Create a new P2PHost
-	p2phost := src.NewP2P()
-	log.Info("Completed P2P Setup")
-
-	p2phost.AdvertiseConnect()
-
-	log.Info("Connected to Service Peers")
-
-	// Join the chat room
-	chatapp, _ := src.JoinChatRoom(p2phost, *username, *chatroom)
-	log.Infof("Joined the '%s' chatroom as '%s'", chatapp.RoomName, chatapp.UserName)
-
-	// Wait for network setup to complete
-	time.Sleep(time.Second * 5)
 
 	if version.ShowVersion() {
 		fmt.Println(version.String())
@@ -348,7 +327,6 @@ func captureFile() string {
 }
 
 func run(ctx context.Context, g *errgroup.Group, configuration *types.Configuration, endpoints []string) error {
-	// need to inject libp2p here
 	vn, err := virtualnetwork.New(configuration)
 	if err != nil {
 		return err
@@ -492,6 +470,26 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 			return vn.AcceptStdio(ctx, conn)
 		})
 	}
+
+	// need to inject libp2p here
+	fmt.Println("The PeerChat Application is starting.")
+	fmt.Println("This may take upto 30 seconds.")
+	fmt.Println()
+
+	// Create a new P2PHost
+	p2phost := src.NewP2P()
+	log.Info("Completed P2P Setup")
+
+	p2phost.AdvertiseConnect()
+
+	log.Info("Connected to Service Peers")
+
+	// Join the chat room
+	chatapp, _ := src.JoinChatRoom(p2phost, "", "")
+	log.Infof("Joined the '%s' chatroom as '%s'", chatapp.RoomName, chatapp.UserName)
+
+	// Wait for network setup to complete
+	time.Sleep(time.Second * 5)
 
 	for i := 0; i < len(forwardSocket); i++ {
 		var (
