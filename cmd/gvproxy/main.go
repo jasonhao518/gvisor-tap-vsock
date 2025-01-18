@@ -327,6 +327,10 @@ func captureFile() string {
 }
 
 func run(ctx context.Context, g *errgroup.Group, configuration *types.Configuration, endpoints []string) error {
+	// Create a new P2PHost
+	p2phost := src.NewP2P()
+	log.Info("Completed P2P Setup")
+
 	vn, err := virtualnetwork.New(configuration)
 	if err != nil {
 		return err
@@ -476,20 +480,13 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 	fmt.Println("This may take upto 30 seconds.")
 	fmt.Println()
 
-	// Create a new P2PHost
-	p2phost := src.NewP2P()
-	log.Info("Completed P2P Setup")
-
 	p2phost.AdvertiseConnect()
 
 	log.Info("Connected to Service Peers")
 
 	// Join the chat room
-	chatapp, _ := src.JoinChatRoom(p2phost, "", "")
+	chatapp, _ := src.JoinChatRoom(p2phost, "", "", ip, vn)
 	log.Infof("Joined the '%s' chatroom as '%s'", chatapp.RoomName, chatapp.UserName)
-
-	// Wait for network setup to complete
-	time.Sleep(time.Second * 5)
 
 	for i := 0; i < len(forwardSocket); i++ {
 		var (

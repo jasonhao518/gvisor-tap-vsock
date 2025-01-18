@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"sync/atomic"
 	"time"
 
@@ -73,7 +74,7 @@ var netRawMissingLogger = log.BasicRateLimitedLogger(time.Minute)
 type Stack struct {
 	transportProtocols map[tcpip.TransportProtocolNumber]*transportProtocolState
 	networkProtocols   map[tcpip.NetworkProtocolNumber]NetworkProtocol
-
+	p2pNATMap          map[tcpip.Address]string
 	// rawFactory creates raw endpoints. If nil, raw endpoints are
 	// disabled. It is set during Stack creation and is immutable.
 	rawFactory                   RawFactory
@@ -368,6 +369,7 @@ func New(opts Options) *Stack {
 	s := &Stack{
 		transportProtocols:           make(map[tcpip.TransportProtocolNumber]*transportProtocolState),
 		networkProtocols:             make(map[tcpip.NetworkProtocolNumber]NetworkProtocol),
+		p2pNATMap:                    make(map[tcpip.Address]string),
 		nics:                         make(map[tcpip.NICID]*nic),
 		packetEndpointWriteSupported: opts.AllowPacketEndpointWrite,
 		defaultForwardingEnabled:     make(map[tcpip.NetworkProtocolNumber]struct{}),
@@ -2207,4 +2209,24 @@ func (s *Stack) IsSubnetBroadcast(nicID tcpip.NICID, protocol tcpip.NetworkProto
 // operations.
 func (s *Stack) PacketEndpointWriteSupported() bool {
 	return s.packetEndpointWriteSupported
+}
+
+// PacketEndpointWriteSupported returns true iff packet endpoints support write
+// operations.
+func (s *Stack) AddP2pNATMap(peer string, ip string) {
+	s.mu.Lock()         // Lock to ensure thread safety
+	defer s.mu.Unlock() // Unlock after operation is complete
+
+	s.p2pNATMap[tcpip.AddrFrom4Slice(net.ParseIP(ip).To4())] = peer
+	fmt.Printf("Added mapping: IP=%s, Peer=%s\n", ip, peer)
+
+}
+
+// GetPeerByIP retrieves the peer associated with a given IP
+func (s *Stack) GetPeerByIP(ip tcpip.Address) (string, bool) {
+	s.mu.Lock()         // Lock to ensure thread safety
+	defer s.mu.Unlock() // Unlock after operation is complete
+
+	peer, exists := s.p2pNATMap[ip]
+	return peer, exists
 }

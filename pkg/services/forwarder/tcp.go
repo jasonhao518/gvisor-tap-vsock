@@ -20,38 +20,47 @@ const linkLocalSubnet = "169.254.0.0/16"
 func TCP(s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex) *tcp.Forwarder {
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
-
+		p2pAddress := ""
+		log.Infof("hanle tcp nat: LocalAddress=%s\n", localAddress)
 		if linkLocal().Contains(localAddress) {
 			r.Complete(true)
 			return
 		}
 
 		natLock.Lock()
-		if replaced, ok := nat[localAddress]; ok {
+		if peer, found := s.GetPeerByIP(localAddress); found {
+			log.Infof("Found in p2pNATMap: LocalAddress=%s, Peer=%s\n", localAddress, peer)
+			p2pAddress = peer
+		} else if replaced, ok := nat[localAddress]; ok {
 			localAddress = replaced
 		}
 		natLock.Unlock()
-		outbound, err := net.Dial("tcp", fmt.Sprintf("%s:%d", localAddress, r.ID().LocalPort))
-		if err != nil {
-			log.Tracef("net.Dial() = %v", err)
-			r.Complete(true)
-			return
-		}
 
-		var wq waiter.Queue
-		ep, tcpErr := r.CreateEndpoint(&wq)
-		r.Complete(false)
-		if tcpErr != nil {
-			log.Errorf("r.CreateEndpoint() = %v", tcpErr)
-			return
-		}
+		if p2pAddress != "" {
+			log.Infof("handle p2p nat: LocalAddress=%s, Peer=%s\n", localAddress, p2pAddress)
+		} else {
+			outbound, err := net.Dial("tcp", fmt.Sprintf("%s:%d", localAddress, r.ID().LocalPort))
+			if err != nil {
+				log.Tracef("net.Dial() = %v", err)
+				r.Complete(true)
+				return
+			}
 
-		remote := tcpproxy.DialProxy{
-			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return outbound, nil
-			},
+			var wq waiter.Queue
+			ep, tcpErr := r.CreateEndpoint(&wq)
+			r.Complete(false)
+			if tcpErr != nil {
+				log.Errorf("r.CreateEndpoint() = %v", tcpErr)
+				return
+			}
+
+			remote := tcpproxy.DialProxy{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return outbound, nil
+				},
+			}
+			remote.HandleConn(gonet.NewTCPConn(&wq, ep))
 		}
-		remote.HandleConn(gonet.NewTCPConn(&wq, ep))
 	})
 }
 

@@ -114,7 +114,7 @@ func (e *LinkEndpoint) writePacket(r stack.RouteInfo, protocol tcpip.NetworkProt
 		ip := tcpip.AddrFromSlice(h.ProtocolAddressSender()).String()
 		_, ok := e.virtualIPs[ip]
 		if ip != e.IP() && !ok {
-			log.Debugf("dropping spoofing packets from the gateway about IP %s", ip)
+			log.Infof("dropping spoofing packets from the gateway about IP %s", ip)
 			return nil
 		}
 	}
@@ -134,4 +134,8 @@ func (e *LinkEndpoint) WriteRawPacket(_ stack.PacketBufferPtr) tcpip.Error {
 
 func (e *LinkEndpoint) IP() string {
 	return e.ip
+}
+
+func (e *LinkEndpoint) AddVirtualIp(ip string) {
+	e.virtualIPs[ip] = struct{}{}
 }

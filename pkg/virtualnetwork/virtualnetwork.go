@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 
+	log2 "github.com/sirupsen/logrus"
+
 	"github.com/containers/gvisor-tap-vsock/pkg/tap"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
 	"github.com/pkg/errors"
@@ -25,6 +27,7 @@ type VirtualNetwork struct {
 	networkSwitch *tap.Switch
 	servicesMux   http.Handler
 	ipPool        *tap.IPPool
+	endpoint      *tap.LinkEndpoint
 }
 
 func New(configuration *types.Configuration) (*VirtualNetwork, error) {
@@ -78,6 +81,7 @@ func New(configuration *types.Configuration) (*VirtualNetwork, error) {
 		stack:         stack,
 		networkSwitch: networkSwitch,
 		servicesMux:   mux,
+		endpoint:      tapEndpoint,
 		ipPool:        ipPool,
 	}, nil
 }
@@ -94,6 +98,12 @@ func (n *VirtualNetwork) BytesReceived() uint64 {
 		return 0
 	}
 	return n.networkSwitch.Received
+}
+
+func (n *VirtualNetwork) UpdateRoute(peer string, ip string) {
+	log2.Infof("update route '%s' as '%s'", peer, ip)
+	n.endpoint.AddVirtualIp(ip)
+	n.stack.AddP2pNATMap(peer, ip)
 }
 
 func createStack(configuration *types.Configuration, endpoint stack.LinkEndpoint) (*stack.Stack, error) {

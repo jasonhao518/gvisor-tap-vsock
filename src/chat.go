@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	"github.com/containers/gvisor-tap-vsock/pkg/virtualnetwork"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
@@ -58,7 +60,7 @@ type chatlog struct {
 
 // A constructor function that generates and returns a new
 // ChatRoom for a given P2PHost, username and roomname
-func JoinChatRoom(p2phost *P2P, username string, roomname string) (*ChatRoom, error) {
+func JoinChatRoom(p2phost *P2P, username string, roomname string, ip string, network *virtualnetwork.VirtualNetwork) (*ChatRoom, error) {
 
 	// Create a PubSub topic with the room name
 	topic, err := p2phost.PubSub.Join(fmt.Sprintf("room-peerchat-%s", roomname))
@@ -108,9 +110,9 @@ func JoinChatRoom(p2phost *P2P, username string, roomname string) (*ChatRoom, er
 	}
 
 	// Start the subscribe loop
-	go chatroom.SubLoop()
+	go chatroom.SubLoop(network)
 	// Start the publish loop
-	go chatroom.PubLoop()
+	go chatroom.PubLoop(ip)
 
 	// Return the chatroom
 	return chatroom, nil
@@ -118,18 +120,18 @@ func JoinChatRoom(p2phost *P2P, username string, roomname string) (*ChatRoom, er
 
 // A method of ChatRoom that publishes a chatmessage
 // to the PubSub topic until the pubsub context closes
-func (cr *ChatRoom) PubLoop() {
+func (cr *ChatRoom) PubLoop(ip string) {
 	for {
 		select {
 		case <-cr.psctx.Done():
 			return
 
-		case message := <-cr.Outbound:
+		default:
 			// Create a ChatMessage
 			m := chatmessage{
-				Message:    message,
+				Message:    ip,
 				SenderID:   cr.selfid.String(),
-				SenderName: cr.UserName,
+				SenderName: ip,
 			}
 
 			// Marshal the ChatMessage into a JSON
@@ -145,6 +147,7 @@ func (cr *ChatRoom) PubLoop() {
 				cr.Logs <- chatlog{logprefix: "puberr", logmsg: "could not publish to topic"}
 				continue
 			}
+			time.Sleep(15 * time.Second)
 		}
 	}
 }
@@ -152,7 +155,7 @@ func (cr *ChatRoom) PubLoop() {
 // A method of ChatRoom that continously reads from the subscription
 // until either the subscription or pubsub context closes.
 // The recieved message is parsed sent into the inbound channel
-func (cr *ChatRoom) SubLoop() {
+func (cr *ChatRoom) SubLoop(network *virtualnetwork.VirtualNetwork) {
 	// Start loop
 	for {
 		select {
@@ -184,8 +187,8 @@ func (cr *ChatRoom) SubLoop() {
 				continue
 			}
 
-			// Send the ChatMessage into the message queue
-			cr.Inbound <- *cm
+			// update NAT routing table
+			network.UpdateRoute(cm.SenderID, cm.SenderName)
 		}
 	}
 }
