@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"os"
 
-	log2 "github.com/sirupsen/logrus"
-
 	"github.com/containers/gvisor-tap-vsock/pkg/tap"
 	"github.com/containers/gvisor-tap-vsock/pkg/types"
+	host "github.com/libp2p/go-libp2p/core/host"
 	"github.com/pkg/errors"
+	log2 "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/link/sniffer"
 	"gvisor.dev/gvisor/pkg/tcpip/network/arp"
@@ -30,7 +30,7 @@ type VirtualNetwork struct {
 	endpoint      *tap.LinkEndpoint
 }
 
-func New(configuration *types.Configuration) (*VirtualNetwork, error) {
+func New(configuration *types.Configuration, p2pHost host.Host) (*VirtualNetwork, error) {
 	_, subnet, err := net.ParseCIDR(configuration.Subnet)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot parse subnet cidr")
@@ -71,7 +71,7 @@ func New(configuration *types.Configuration) (*VirtualNetwork, error) {
 		return nil, errors.Wrap(err, "cannot create network stack")
 	}
 
-	mux, err := addServices(configuration, stack, ipPool)
+	mux, err := addServices(configuration, stack, ipPool, p2pHost)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot add network services")
 	}
