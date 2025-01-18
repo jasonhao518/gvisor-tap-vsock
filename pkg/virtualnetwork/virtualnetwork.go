@@ -1,6 +1,7 @@
 package virtualnetwork
 
 import (
+	"context"
 	"math"
 	"net"
 	"net/http"
@@ -30,7 +31,7 @@ type VirtualNetwork struct {
 	endpoint      *tap.LinkEndpoint
 }
 
-func New(configuration *types.Configuration, p2pHost host.Host) (*VirtualNetwork, error) {
+func New(ctx context.Context, configuration *types.Configuration, p2pHost host.Host) (*VirtualNetwork, error) {
 	_, subnet, err := net.ParseCIDR(configuration.Subnet)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot parse subnet cidr")
@@ -71,7 +72,7 @@ func New(configuration *types.Configuration, p2pHost host.Host) (*VirtualNetwork
 		return nil, errors.Wrap(err, "cannot create network stack")
 	}
 
-	mux, err := addServices(configuration, stack, ipPool, p2pHost)
+	mux, err := addServices(ctx, configuration, stack, ipPool, p2pHost)
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot add network services")
 	}

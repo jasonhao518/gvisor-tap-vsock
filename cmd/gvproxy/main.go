@@ -331,7 +331,7 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 	p2phost := src.NewP2P()
 	log.Info("Completed P2P Setup")
 
-	vn, err := virtualnetwork.New(configuration, p2phost.Host)
+	vn, err := virtualnetwork.New(ctx, configuration, p2phost.Host)
 	if err != nil {
 		return err
 	}
