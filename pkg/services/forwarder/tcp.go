@@ -3,10 +3,12 @@ package forwarder
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
 	host "github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	log "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -21,6 +23,9 @@ const linkLocalSubnet = "169.254.0.0/16"
 const LIBP2P_TAP = "/gvisor/libp2p-tap/1.0.0"
 
 func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex, p2pHost host.Host) *tcp.Forwarder {
+	p2pHost.SetStreamHandler(LIBP2P_TAP, func(s network.Stream) {
+
+	})
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
 		p2pAddress := ""
@@ -45,13 +50,25 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			if err != nil {
 				log.Warnf("Failed to parse Peer ID: %v", err)
 			}
-			s, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP)
+			var wq waiter.Queue
+			ep, tcpErr := r.CreateEndpoint(&wq)
+			r.Complete(false)
+			if tcpErr != nil {
+				log.Errorf("r.CreateEndpoint() = %v", tcpErr)
+				return
+			}
+			libp2pStream, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP)
 			if err != nil {
 				log.Warnf("creating stream to %s error: %v", p2pAddress, err)
 				return
 			}
+			defer libp2pStream.Close()
 
-			defer s.Close()
+			tcpConn := gonet.NewTCPConn(&wq, ep)
+			defer tcpConn.Close()
+			go io.Copy(libp2pStream, tcpConn)
+			go io.Copy(tcpConn, libp2pStream)
+
 		} else {
 			outbound, err := net.Dial("tcp", fmt.Sprintf("%s:%d", localAddress, r.ID().LocalPort))
 			if err != nil {
