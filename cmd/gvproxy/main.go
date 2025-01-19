@@ -51,6 +51,8 @@ var (
 	ip              string
 	gatewayIP       string
 	hostIP          string
+	subnet          string
+	vlan            string
 )
 
 const (
@@ -74,8 +76,8 @@ func main() {
 	version := types.NewVersion("gvproxy")
 	version.AddFlag()
 	flag.StringVar(&ip, "ip", "192.168.127.99", "VM ip address")
-	flag.StringVar(&gatewayIP, "gatewayIP", "192.168.127.1", "VM ip address")
-	flag.StringVar(&hostIP, "hostIP", "192.168.127.254", "VM ip address")
+	flag.StringVar(&subnet, "subnet", "192.168.127.0/24", "VM subnet")
+	flag.StringVar(&vlan, "vlan", "", "VLAN of the VM")
 	flag.Var(&endpoints, "listen", "control endpoint")
 	flag.BoolVar(&debug, "debug", false, "Print debug info")
 	flag.IntVar(&mtu, "mtu", 1500, "Set the MTU")
@@ -95,6 +97,7 @@ func main() {
 	flag.Parse()
 
 	log.Info("ip address", ip)
+	gatewayIP, hostIP, _ = calculateIPs(subnet)
 
 	if version.ShowVersion() {
 		fmt.Println(version.String())
@@ -235,7 +238,7 @@ func main() {
 		Debug:             debug,
 		CaptureFile:       captureFile(),
 		MTU:               mtu,
-		Subnet:            "192.168.127.0/24",
+		Subnet:            subnet,
 		GatewayIP:         gatewayIP,
 		GatewayMacAddress: "5a:94:ef:e4:0c:dd",
 		DHCPStaticLeases: map[string]string{
@@ -483,7 +486,7 @@ func run(ctx context.Context, g *errgroup.Group, configuration *types.Configurat
 	log.Info("Connected to Service Peers")
 
 	// Join the chat room
-	chatapp, _ := src.JoinChatRoom(p2phost, "", "", ip, vn)
+	chatapp, _ := src.JoinChatRoom(p2phost, "", vlan, ip, vn)
 	log.Infof("Joined the '%s' chatroom as '%s'", chatapp.RoomName, chatapp.UserName)
 
 	for i := 0; i < len(forwardSocket); i++ {
@@ -602,4 +605,34 @@ func searchDomains() []string {
 		}
 	}
 	return nil
+}
+
+func calculateIPs(subnet string) (string, string, error) {
+	_, ipNet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid subnet: %v", err)
+	}
+
+	// Convert the IP to a 4-byte representation
+	ip := ipNet.IP.To4()
+	if ip == nil {
+		return "", "", fmt.Errorf("invalid IPv4 address")
+	}
+
+	// Gateway IP: the first IP in the subnet (network address + 1)
+	gateway := make(net.IP, len(ip))
+	copy(gateway, ip)
+	gateway[3]++
+
+	// Host IP: the last usable IP in the subnet (broadcast address - 1)
+	mask := ipNet.Mask
+	broadcast := make(net.IP, len(ip))
+	for i := 0; i < len(ip); i++ {
+		broadcast[i] = ip[i] | ^mask[i]
+	}
+	host := make(net.IP, len(broadcast))
+	copy(host, broadcast)
+	host[3]--
+
+	return gateway.String(), host.String(), nil
 }
