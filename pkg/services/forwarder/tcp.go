@@ -1,10 +1,10 @@
 package forwarder
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 
@@ -25,7 +25,7 @@ const LIBP2P_TAP = "/gvisor/libp2p-tap/1.0.0"
 
 func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex, p2pHost host.Host) *tcp.Forwarder {
 	p2pHost.SetStreamHandler(LIBP2P_TAP, func(s network.Stream) {
-		buf := make([]byte, 4)
+		buf := make([]byte, 6)
 
 		// Read 4 bytes from the stream
 		_, err := s.Read(buf)
@@ -34,10 +34,14 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			return
 		}
 
-		// Decode the integer using BigEndian
-		num := binary.BigEndian.Uint32(buf)
+		// Deserialize
+		addr, err := DeserializeAddress(buf)
+		if err != nil {
+			fmt.Println("Deserialization error:", err)
+			return
+		}
 
-		log.Printf("Received number: %d", num)
+		fmt.Printf("Received Address: %+v\n", addr)
 	})
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
@@ -63,6 +67,31 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			if err != nil {
 				log.Warnf("Failed to parse Peer ID: %v", err)
 			}
+
+			libp2pStream, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP)
+			if err != nil {
+				log.Warnf("creating stream to %s error: %v", p2pAddress, err)
+				return
+			}
+			defer libp2pStream.Close()
+			addr := tcpip.FullAddress{Addr: r.ID().LocalAddress, Port: r.ID().LocalPort}
+			serialized, err := SerializeAddress(addr)
+			if err != nil {
+				fmt.Println("Serialization error:", err)
+				return
+			}
+			// Write the buffer to the stream
+			_, err2 := libp2pStream.Write(serialized)
+			if err2 != nil {
+				log.Errorf("r.CreateEndpoint() = %v", err2)
+			}
+			outbound := NewStreamConn(libp2pStream)
+			if err != nil {
+				log.Tracef("net.Dial() = %v", err)
+				r.Complete(true)
+				return
+			}
+
 			var wq waiter.Queue
 			ep, tcpErr := r.CreateEndpoint(&wq)
 			r.Complete(false)
@@ -70,28 +99,13 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 				log.Errorf("r.CreateEndpoint() = %v", tcpErr)
 				return
 			}
-			libp2pStream, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP)
-			if err != nil {
-				log.Warnf("creating stream to %s error: %v", p2pAddress, err)
-				return
-			}
-			defer libp2pStream.Close()
-			tcpConn := gonet.NewTCPConn(&wq, ep)
-			defer tcpConn.Close()
 
-			// write target port number
-			buf := make([]byte, 4) // Assuming 4 bytes (int32)
-			// Encode the integer into the buffer
-			binary.BigEndian.PutUint32(buf, uint32(r.ID().LocalPort))
-
-			// Write the buffer to the stream
-			_, err2 := libp2pStream.Write(buf)
-			if err2 != nil {
-				log.Warnf("creating stream to %s error: %v", p2pAddress, err)
-				return
+			remote := tcpproxy.DialProxy{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return outbound, nil
+				},
 			}
-			go io.Copy(libp2pStream, tcpConn)
-			go io.Copy(tcpConn, libp2pStream)
+			remote.HandleConn(gonet.NewTCPConn(&wq, ep))
 
 		} else {
 			outbound, err := net.Dial("tcp", fmt.Sprintf("%s:%d", localAddress, r.ID().LocalPort))
@@ -123,4 +137,33 @@ func linkLocal() *tcpip.Subnet {
 	_, parsedSubnet, _ := net.ParseCIDR(linkLocalSubnet) // CoreOS VM tries to connect to Amazon EC2 metadata service
 	subnet, _ := tcpip.NewSubnet(tcpip.AddrFromSlice(parsedSubnet.IP), tcpip.MaskFromBytes(parsedSubnet.Mask))
 	return &subnet
+}
+
+// Serialize the FullAddress into a byte slice
+func SerializeAddress(addr tcpip.FullAddress) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	// Write IP
+	if err := binary.Write(buf, binary.BigEndian, addr.Addr); err != nil {
+		return nil, err
+	}
+	// Write Port
+	if err := binary.Write(buf, binary.BigEndian, addr.Port); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Deserialize a byte slice into FullAddress
+func DeserializeAddress(data []byte) (tcpip.FullAddress, error) {
+	buf := bytes.NewReader(data)
+	var addr tcpip.FullAddress
+	// Read IP
+	if err := binary.Read(buf, binary.BigEndian, &addr.Addr); err != nil {
+		return addr, err
+	}
+	// Read Port
+	if err := binary.Read(buf, binary.BigEndian, &addr.Port); err != nil {
+		return addr, err
+	}
+	return addr, nil
 }
