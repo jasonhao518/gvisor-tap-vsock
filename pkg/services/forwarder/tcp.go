@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/waiter"
@@ -23,11 +24,11 @@ const linkLocalSubnet = "169.254.0.0/16"
 const LIBP2P_TAP = "/gvisor/libp2p-tap/1.0.0"
 
 func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex, p2pHost host.Host) *tcp.Forwarder {
-	p2pHost.SetStreamHandler(LIBP2P_TAP, func(s network.Stream) {
+	p2pHost.SetStreamHandler(LIBP2P_TAP, func(stream network.Stream) {
 		buf := make([]byte, 4)
 
 		// Read 4 bytes from the stream
-		_, err := s.Read(buf)
+		_, err := stream.Read(buf)
 		if err != nil {
 			log.Printf("Error reading from stream: %v", err)
 			return
@@ -37,7 +38,7 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 		buf = make([]byte, 2)
 
 		// Read 4 bytes from the stream
-		_, err = s.Read(buf)
+		_, err = stream.Read(buf)
 		if err != nil {
 			log.Printf("Error reading from stream: %v", err)
 			return
@@ -47,6 +48,27 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 		num := binary.BigEndian.Uint16(buf)
 
 		log.Printf("Received number: %s %d", addr, num)
+		address := tcpip.FullAddress{
+			Addr: addr,
+			Port: num,
+		}
+		conn, err := gonet.DialContextTCP(ctx, s, address, ipv4.ProtocolNumber)
+		if err != nil {
+			log.Printf("Error reading from stream: %v", err)
+			return
+		}
+
+		remote := tcpproxy.DialProxy{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return conn, nil
+			},
+		}
+
+		incoming := NewStreamConn(stream)
+		if err != nil {
+			log.Tracef("net.Dial() = %v", err)
+		}
+		remote.HandleConn(incoming)
 
 	})
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
