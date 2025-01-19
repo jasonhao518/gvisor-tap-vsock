@@ -21,10 +21,10 @@ import (
 )
 
 const linkLocalSubnet = "169.254.0.0/16"
-const LIBP2P_TAP = "/gvisor/libp2p-tap/1.0.0"
+const LIBP2P_TAP_TCP = "/gvisor/libp2p-tap-tcp/1.0.0"
 
 func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex, p2pHost host.Host) *tcp.Forwarder {
-	p2pHost.SetStreamHandler(LIBP2P_TAP, func(stream network.Stream) {
+	p2pHost.SetStreamHandler(LIBP2P_TAP_TCP, func(stream network.Stream) {
 		buf := make([]byte, 4)
 
 		// Read 4 bytes from the stream
@@ -96,7 +96,7 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 				log.Warnf("Failed to parse Peer ID: %v", err)
 			}
 
-			libp2pStream, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP)
+			libp2pStream, err := p2pHost.NewStream(ctx, peerID, LIBP2P_TAP_TCP)
 			if err != nil {
 				log.Warnf("creating stream to %s error: %v", p2pAddress, err)
 				return
