@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 
@@ -52,10 +51,10 @@ func UDP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			Addr: addr,
 			Port: num,
 		}
-		conn, err := gonet.DialUDP(s, nil, &address, ipv4.ProtocolNumber)
-		defer conn.Close()
-		io.Copy(conn, stream)
-		io.Copy(stream, conn)
+		p, _ := NewUDPProxy(&autoStoppingListener{underlying: NewStreamPacketConn(stream)}, func() (net.Conn, error) {
+			return gonet.DialUDP(s, nil, &address, ipv4.ProtocolNumber)
+		})
+		go p.Run()
 	})
 
 	return udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
