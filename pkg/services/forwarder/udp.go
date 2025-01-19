@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 
@@ -14,6 +15,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/header"
+	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
@@ -46,11 +48,14 @@ func UDP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 		num := binary.BigEndian.Uint16(buf)
 
 		log.Printf("Received number: %s %d", addr, num)
-
-		p, _ := NewUDPProxy(&autoStoppingListener{underlying: NewStreamPacketConn(stream)}, func() (net.Conn, error) {
-			return net.Dial("udp", fmt.Sprintf("%s:%d", addr, num))
-		})
-		go p.Run()
+		address := tcpip.FullAddress{
+			Addr: addr,
+			Port: num,
+		}
+		conn, err := gonet.DialUDP(s, nil, &address, ipv4.ProtocolNumber)
+		defer conn.Close()
+		io.Copy(conn, stream)
+		io.Copy(stream, conn)
 	})
 
 	return udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
