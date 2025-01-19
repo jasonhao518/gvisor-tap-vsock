@@ -49,13 +49,13 @@ var (
 	exitCode        int
 	logFile         string
 	ip              string
+	gatewayIP       string
+	hostIP          string
 )
 
 const (
-	gatewayIP = "192.168.127.1"
-	hostIP    = "192.168.127.254"
-	host      = "host"
-	gateway   = "gateway"
+	host    = "host"
+	gateway = "gateway"
 )
 
 func init() {
@@ -74,6 +74,8 @@ func main() {
 	version := types.NewVersion("gvproxy")
 	version.AddFlag()
 	flag.StringVar(&ip, "ip", "192.168.127.99", "VM ip address")
+	flag.StringVar(&gatewayIP, "gatewayIP", "192.168.127.1", "VM ip address")
+	flag.StringVar(&hostIP, "hostIP", "192.168.127.254", "VM ip address")
 	flag.Var(&endpoints, "listen", "control endpoint")
 	flag.BoolVar(&debug, "debug", false, "Print debug info")
 	flag.IntVar(&mtu, "mtu", 1500, "Set the MTU")
@@ -271,10 +273,6 @@ func main() {
 		Forwards: map[string]string{
 			fmt.Sprintf("127.0.0.1:%d", sshPort): fmt.Sprintf("%s:22", ip),
 			fmt.Sprintf("127.0.0.1:%d", 6443):    fmt.Sprintf("%s:6443", ip),
-			fmt.Sprintf("127.0.0.1:%d", 2379):    fmt.Sprintf("%s:2379", ip),
-			fmt.Sprintf("127.0.0.1:%d", 2380):    fmt.Sprintf("%s:2380", ip),
-			fmt.Sprintf("127.0.0.1:%d", 10250):   fmt.Sprintf("%s:10250", ip),
-			fmt.Sprintf("127.0.0.1:%d", 10256):   fmt.Sprintf("%s:10256", ip),
 		},
 		NAT: map[string]string{
 			hostIP: "127.0.0.1",

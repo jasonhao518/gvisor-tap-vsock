@@ -60,7 +60,6 @@ func UDP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 	return udp.NewForwarder(s, func(r *udp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
 		p2pAddress := ""
-		log.Infof("hanle udp nat: LocalAddress=%s\n", localAddress)
 		if linkLocal().Contains(localAddress) || localAddress == header.IPv4Broadcast {
 			return
 		}

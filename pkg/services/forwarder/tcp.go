@@ -74,7 +74,6 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
 		p2pAddress := ""
-		log.Infof("hanle tcp nat: LocalAddress=%s\n", localAddress)
 		if linkLocal().Contains(localAddress) {
 			r.Complete(true)
 			return
