@@ -1,7 +1,6 @@
 package forwarder
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -25,7 +24,7 @@ const LIBP2P_TAP = "/gvisor/libp2p-tap/1.0.0"
 
 func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Address, natLock *sync.Mutex, p2pHost host.Host) *tcp.Forwarder {
 	p2pHost.SetStreamHandler(LIBP2P_TAP, func(s network.Stream) {
-		buf := make([]byte, 6)
+		buf := make([]byte, 4)
 
 		// Read 4 bytes from the stream
 		_, err := s.Read(buf)
@@ -34,14 +33,11 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			return
 		}
 
-		// Deserialize
-		addr, err := DeserializeAddress(buf)
-		if err != nil {
-			fmt.Println("Deserialization error:", err)
-			return
-		}
+		// Decode the integer using BigEndian
+		num := binary.BigEndian.Uint32(buf)
 
-		fmt.Printf("Received Address: %+v\n", addr)
+		log.Printf("Received number: %d", num)
+
 	})
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
 		localAddress := r.ID().LocalAddress
@@ -74,14 +70,13 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 				return
 			}
 			defer libp2pStream.Close()
-			addr := tcpip.FullAddress{Addr: r.ID().LocalAddress, Port: r.ID().LocalPort}
-			serialized, err := SerializeAddress(addr)
-			if err != nil {
-				fmt.Println("Serialization error:", err)
-				return
-			}
+
+			buf := make([]byte, 4) // Assuming 4 bytes (int32)
+			// Encode the integer into the buffer
+			binary.BigEndian.PutUint32(buf, uint32(r.ID().LocalPort))
+
 			// Write the buffer to the stream
-			_, err2 := libp2pStream.Write(serialized)
+			_, err2 := libp2pStream.Write(buf)
 			if err2 != nil {
 				log.Errorf("r.CreateEndpoint() = %v", err2)
 			}
@@ -137,33 +132,4 @@ func linkLocal() *tcpip.Subnet {
 	_, parsedSubnet, _ := net.ParseCIDR(linkLocalSubnet) // CoreOS VM tries to connect to Amazon EC2 metadata service
 	subnet, _ := tcpip.NewSubnet(tcpip.AddrFromSlice(parsedSubnet.IP), tcpip.MaskFromBytes(parsedSubnet.Mask))
 	return &subnet
-}
-
-// Serialize the FullAddress into a byte slice
-func SerializeAddress(addr tcpip.FullAddress) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	// Write IP
-	if err := binary.Write(buf, binary.BigEndian, addr.Addr); err != nil {
-		return nil, err
-	}
-	// Write Port
-	if err := binary.Write(buf, binary.BigEndian, addr.Port); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// Deserialize a byte slice into FullAddress
-func DeserializeAddress(data []byte) (tcpip.FullAddress, error) {
-	buf := bytes.NewReader(data)
-	var addr tcpip.FullAddress
-	// Read IP
-	if err := binary.Read(buf, binary.BigEndian, &addr.Addr); err != nil {
-		return addr, err
-	}
-	// Read Port
-	if err := binary.Read(buf, binary.BigEndian, &addr.Port); err != nil {
-		return addr, err
-	}
-	return addr, nil
 }
