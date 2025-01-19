@@ -32,11 +32,21 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			log.Printf("Error reading from stream: %v", err)
 			return
 		}
+		addr := tcpip.AddrFromSlice(buf)
+
+		buf = make([]byte, 2)
+
+		// Read 4 bytes from the stream
+		_, err = s.Read(buf)
+		if err != nil {
+			log.Printf("Error reading from stream: %v", err)
+			return
+		}
 
 		// Decode the integer using BigEndian
-		num := binary.BigEndian.Uint32(buf)
+		num := binary.BigEndian.Uint16(buf)
 
-		log.Printf("Received number: %d", num)
+		log.Printf("Received number: %s %d", addr, num)
 
 	})
 	return tcp.NewForwarder(s, 0, 10, func(r *tcp.ForwarderRequest) {
@@ -71,12 +81,18 @@ func TCP(ctx context.Context, s *stack.Stack, nat map[tcpip.Address]tcpip.Addres
 			}
 			defer libp2pStream.Close()
 
-			buf := make([]byte, 4) // Assuming 4 bytes (int32)
+			buf := make([]byte, 2) // Assuming 4 bytes (int32)
 			// Encode the integer into the buffer
-			binary.BigEndian.PutUint32(buf, uint32(r.ID().LocalPort))
+			binary.BigEndian.PutUint16(buf, uint16(r.ID().LocalPort))
 
 			// Write the buffer to the stream
-			_, err2 := libp2pStream.Write(buf)
+
+			addr := r.ID().LocalAddress.As4() // Now addr is addressable
+			_, err2 := libp2pStream.Write(addr[:])
+			if err2 != nil {
+				log.Errorf("r.CreateEndpoint() = %v", err2)
+			}
+			_, err2 = libp2pStream.Write(buf)
 			if err2 != nil {
 				log.Errorf("r.CreateEndpoint() = %v", err2)
 			}
